@@ -44,10 +44,28 @@ class TestManager(unittest.TestCase):
 
     @patch('ncclient.manager.connect_ioproc')
     def test_connect_ioproc(self, mock_ssh):
-        manager.connect(host='localhost', device_params={'name': 'junos', 
+        manager.connect(host='localhost', device_params={'name': 'junos',
                                                         'local': True})
-        mock_ssh.assert_called_once_with(host='localhost', 
+        mock_ssh.assert_called_once_with(host='localhost',
                             device_params={'local': True, 'name': 'junos'})
+
+    @patch('socket.socket')
+    @patch('ncclient.manager.connect_ssh')
+    def test_call_home_accept_one_ssh(self, mock_ssh, mock_socket_open):
+        mock_connected_socket = MagicMock()
+        mock_server_socket = MagicMock()
+        mock_socket_open.return_value = mock_server_socket
+        mock_server_socket.accept.return_value = (mock_connected_socket,
+                                                  'remote.host')
+        with manager.CallhomeManager(bind_to='0.0.0.0', port=1234) as chm:
+            chm.accept_one_ssh(username='test_user', password='test_password')
+            mock_ssh.assert_called_once_with(username='test_user',
+                                             password='test_password',
+                                             host='',
+                                             port=1234,
+                                             sock=mock_connected_socket)
+            self.assertEqual(mock_server_socket.close.called, 0)
+        self.assertEqual(mock_server_socket.close.called, 1)
 
     @patch('socket.socket')
     @patch('paramiko.Transport')
@@ -74,7 +92,7 @@ class TestManager(unittest.TestCase):
                                     hostkey_verify=False)
         self.assertEqual(mock_connect.called, 1)
         self.assertEqual(conn._timeout, 10)
-        self.assertEqual(conn._device_handler.device_params, {'local': True, 'name': 'junos'}) 
+        self.assertEqual(conn._device_handler.device_params, {'local': True, 'name': 'junos'})
         self.assertEqual(
             conn._device_handler.__class__.__name__,
             "JunosDeviceHandler")
